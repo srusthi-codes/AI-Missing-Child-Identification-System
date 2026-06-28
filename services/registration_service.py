@@ -8,11 +8,11 @@ from config.constants import CHILD_STATUS_MISSING
 from database.connection import database_transaction
 from database.repositories.child_repository import case_id_exists, create_missing_child
 from database.repositories.embedding_repository import create_face_embedding_records
-from database.repositories.image_repository import create_child_image_records
+from database.repositories.image_repository import create_child_image_records, find_existing_image_hashes
 from database.repositories.log_repository import create_activity_log
 from database.repositories.parent_repository import create_parent_details
 from database.schema import initialize_database
-from services.embedding_service import generate_registration_embeddings
+from services.embedding_service import generate_registration_embedding_batch
 from utils.file_handler import cleanup_saved_files, save_uploaded_images, validate_uploaded_images
 from utils.logger import get_logger
 from utils.validators import ValidationError, validate_child_data, validate_parent_data
@@ -43,9 +43,12 @@ def register_missing_child(
             normalized_child["status"] = CHILD_STATUS_MISSING
             normalized_child["registered_by"] = None
 
+            _reject_existing_images(connection, prepared_images)
+
             saved_images = save_uploaded_images(case_id, prepared_images)
             saved_image_paths = [record["absolute_path"] for record in saved_images]
-            embedding_records = generate_registration_embeddings(saved_images)
+            embedding_batch = generate_registration_embedding_batch(saved_images)
+            embedding_records = embedding_batch.records
             embedding_count = len(embedding_records)
 
             child_id = create_missing_child(connection, normalized_child)
@@ -64,6 +67,8 @@ def register_missing_child(
                     "guardian_phone": normalized_parent["phone"],
                     "image_count": len(saved_images),
                     "embedding_count": embedding_count,
+                    "rejected_embedding_count": len(embedding_batch.rejected_reasons),
+                    "rejected_embedding_reasons": embedding_batch.rejected_reasons[:5],
                     "embedding_model": embedding_records[0]["model_name"],
                 },
             )
@@ -116,3 +121,11 @@ def _generate_case_id(connection: sqlite3.Connection) -> str:
         if not case_id_exists(connection, case_id):
             return case_id
     raise RuntimeError("Unable to generate a unique case ID")
+
+
+def _reject_existing_images(connection: sqlite3.Connection, prepared_images: list[Any]) -> None:
+    image_hashes = [image.image_hash for image in prepared_images]
+    existing_hashes = find_existing_image_hashes(connection, image_hashes)
+    if existing_hashes:
+        logger.warning("Duplicate image upload rejected existing_hash_count=%s", len(existing_hashes))
+        raise ValidationError("One or more uploaded images already exist in the child image database.")

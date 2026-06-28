@@ -1,16 +1,18 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ai.model_assets import ModelAssetError, ModelAssetSpec, ensure_model_file
 from config.settings import (
-    DEEPFACE_DETECTOR_BACKEND,
-    DEEPFACE_MODEL_NAME,
     FACE_EMBEDDING_BACKEND,
+    MIN_EMBEDDING_L2_NORM,
+    MIN_FACE_AREA_RATIO,
     MIN_FACE_IMAGE_QUALITY_SCORE,
     OPENCV_FACE_NMS_THRESHOLD,
     OPENCV_FACE_SCORE_THRESHOLD,
     OPENCV_FACE_TOP_K,
+    OPENCV_SFACE_EMBEDDING_DIMENSION,
     OPENCV_SFACE_MODEL_SHA256,
     OPENCV_SFACE_MODEL_PATH,
     OPENCV_SFACE_MODEL_SIZE,
@@ -65,9 +67,6 @@ def generate_face_embedding_for_image(image_record: dict[str, Any]) -> FaceEmbed
 
     if FACE_EMBEDDING_BACKEND == "opencv_sface":
         return _generate_opencv_sface_embedding(image_record, image_path, quality_score)
-
-    if FACE_EMBEDDING_BACKEND == "deepface":
-        return _generate_deepface_embedding(image_record, image_path, quality_score)
 
     raise FaceEmbeddingDependencyError(f"Unsupported face embedding backend: {FACE_EMBEDDING_BACKEND}")
 
@@ -127,16 +126,62 @@ def _generate_opencv_sface_embedding(
         raise FaceImageRejectedError("Image could not be read by OpenCV.")
 
     height, width = image.shape[:2]
-    detector = cv2.FaceDetectorYN_create(
-        str(yunet_model_path),
-        "",
-        (width, height),
-        OPENCV_FACE_SCORE_THRESHOLD,
-        OPENCV_FACE_NMS_THRESHOLD,
-        OPENCV_FACE_TOP_K,
+
+    try:
+        detector = cv2.FaceDetectorYN_create(
+            str(yunet_model_path),
+            "",
+            (width, height),
+            OPENCV_FACE_SCORE_THRESHOLD,
+            OPENCV_FACE_NMS_THRESHOLD,
+            OPENCV_FACE_TOP_K,
+        )
+        _, faces = detector.detect(image)
+    except Exception as exc:
+        logger.exception("OpenCV YuNet failed while detecting faces in %s", image_path)
+        raise FaceEmbeddingError("OpenCV YuNet face detection failed.") from exc
+
+    face, face_area_ratio = _select_single_face(faces, image_width=width, image_height=height)
+
+    try:
+        recognizer = cv2.FaceRecognizerSF_create(str(sface_model_path), "")
+        aligned_face = recognizer.alignCrop(image, face)
+        raw_embedding = recognizer.feature(aligned_face)
+    except Exception as exc:
+        logger.exception("OpenCV SFace failed while generating an embedding for %s", image_path)
+        raise FaceEmbeddingError("OpenCV SFace embedding generation failed.") from exc
+
+    embedding = _normalize_embedding(
+        raw_embedding.flatten().tolist(),
+        expected_dimension=OPENCV_SFACE_EMBEDDING_DIMENSION,
     )
 
-    _, faces = detector.detect(image)
+    if not embedding:
+        raise FaceImageRejectedError("OpenCV SFace returned an empty embedding vector.")
+
+    face_confidence = float(face[-1])
+    logger.info(
+        "Generated OpenCV SFace embedding image=%s dimension=%s quality_score=%.2f face_confidence=%.4f face_area_ratio=%.4f",
+        image_record["image_path"],
+        len(embedding),
+        quality_score,
+        face_confidence,
+        face_area_ratio,
+    )
+
+    return FaceEmbeddingResult(
+        image_path=image_record["image_path"],
+        image_hash=image_record["image_hash"],
+        embedding=embedding,
+        model_name="OpenCV-SFace",
+        detector_backend="OpenCV-YuNet",
+        embedding_dimension=len(embedding),
+        quality_score=quality_score,
+        face_confidence=face_confidence,
+    )
+
+
+def _select_single_face(faces: Any, image_width: int, image_height: int) -> tuple[Any, float]:
     if faces is None or len(faces) == 0:
         raise FaceImageRejectedError("No face detected.")
 
@@ -148,113 +193,47 @@ def _generate_opencv_sface_embedding(
         raise FaceImageRejectedError("Multiple faces detected. Upload an image with only the child.")
 
     face = valid_faces[0]
-    recognizer = cv2.FaceRecognizerSF_create(str(sface_model_path), "")
-    aligned_face = recognizer.alignCrop(image, face)
-    raw_embedding = recognizer.feature(aligned_face)
-    embedding = _normalize_embedding(raw_embedding.flatten().tolist())
-
-    if not embedding:
-        raise FaceImageRejectedError("OpenCV SFace returned an empty embedding vector.")
-
-    return FaceEmbeddingResult(
-        image_path=image_record["image_path"],
-        image_hash=image_record["image_hash"],
-        embedding=embedding,
-        model_name="OpenCV-SFace",
-        detector_backend="OpenCV-YuNet",
-        embedding_dimension=len(embedding),
-        quality_score=quality_score,
-        face_confidence=float(face[-1]),
-    )
-
-
-def _generate_deepface_embedding(
-    image_record: dict[str, Any],
-    image_path: Path,
-    quality_score: float,
-) -> FaceEmbeddingResult:
-    face_representations = _represent_faces_with_deepface(image_path)
-
-    if not face_representations:
-        raise FaceImageRejectedError("No face detected.")
-
-    if len(face_representations) > 1:
-        raise FaceImageRejectedError("Multiple faces detected. Upload an image with only the child.")
-
-    representation = face_representations[0]
-    embedding = _normalize_embedding(representation.get("embedding"))
-
-    if not embedding:
-        raise FaceImageRejectedError("DeepFace returned an empty embedding vector.")
-
-    return FaceEmbeddingResult(
-        image_path=image_record["image_path"],
-        image_hash=image_record["image_hash"],
-        embedding=embedding,
-        model_name=DEEPFACE_MODEL_NAME,
-        detector_backend=DEEPFACE_DETECTOR_BACKEND,
-        embedding_dimension=len(embedding),
-        quality_score=quality_score,
-        face_confidence=_normalize_optional_float(representation.get("face_confidence")),
-    )
-
-
-def _represent_faces_with_deepface(image_path: Path) -> list[dict[str, Any]]:
-    DeepFace = _load_deepface()
-
-    try:
-        result = DeepFace.represent(
-            img_path=str(image_path),
-            model_name=DEEPFACE_MODEL_NAME,
-            detector_backend=DEEPFACE_DETECTOR_BACKEND,
-            enforce_detection=True,
-            align=True,
+    face_area_ratio = _calculate_face_area_ratio(face, image_width, image_height)
+    if face_area_ratio < MIN_FACE_AREA_RATIO:
+        raise FaceImageRejectedError(
+            f"Detected face is too small in the image. Face area ratio {face_area_ratio:.4f} "
+            f"is below the required {MIN_FACE_AREA_RATIO:.4f}."
         )
-    except ValueError as exc:
-        message = str(exc).lower()
-        if "face could not be detected" in message or "no face" in message:
-            raise FaceImageRejectedError("No face detected.") from exc
-        raise FaceImageRejectedError(f"DeepFace rejected the image: {exc}") from exc
-    except Exception as exc:
-        logger.exception("DeepFace failed while generating an embedding for %s", image_path)
-        raise FaceEmbeddingError("DeepFace failed while generating a face embedding.") from exc
 
-    if isinstance(result, dict):
-        return [result]
-
-    if isinstance(result, list):
-        return [item for item in result if isinstance(item, dict)]
-
-    raise FaceEmbeddingError("DeepFace returned an unsupported embedding response.")
+    return face, face_area_ratio
 
 
-def _normalize_embedding(value: Any) -> list[float]:
+def _calculate_face_area_ratio(face: Any, image_width: int, image_height: int) -> float:
+    face_width = max(float(face[2]), 0.0)
+    face_height = max(float(face[3]), 0.0)
+    image_area = float(image_width * image_height)
+    if image_area <= 0:
+        return 0.0
+    return (face_width * face_height) / image_area
+
+
+def _normalize_embedding(value: Any, expected_dimension: int | None = None) -> list[float]:
     if value is None:
         return []
 
     try:
-        return [float(number) for number in value]
+        embedding = [float(number) for number in value]
     except (TypeError, ValueError) as exc:
         raise FaceEmbeddingError("Embedding provider returned a non-numeric vector.") from exc
 
+    if any(not math.isfinite(number) for number in embedding):
+        raise FaceEmbeddingError("Embedding vector contains non-finite values.")
 
-def _normalize_optional_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    if expected_dimension is not None and len(embedding) != expected_dimension:
+        raise FaceEmbeddingError(
+            f"Embedding dimension {len(embedding)} does not match expected {expected_dimension}."
+        )
 
+    l2_norm = math.sqrt(sum(number * number for number in embedding))
+    if l2_norm < MIN_EMBEDDING_L2_NORM:
+        raise FaceEmbeddingError("Embedding vector norm is too small.")
 
-def _load_deepface() -> Any:
-    try:
-        from deepface import DeepFace
-    except (ImportError, ModuleNotFoundError) as exc:
-        raise FaceEmbeddingDependencyError(
-            "DeepFace is not importable in this environment. Use FACE_EMBEDDING_BACKEND='opencv_sface'."
-        ) from exc
-    return DeepFace
+    return embedding
 
 
 def _load_quality_dependencies() -> tuple[Any, Any]:

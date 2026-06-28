@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 from ai.embedding_generator import (
@@ -14,7 +15,17 @@ from utils.validators import ValidationError
 logger = get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class RegistrationEmbeddingBatch:
+    records: list[dict[str, Any]]
+    rejected_reasons: list[str]
+
+
 def generate_registration_embeddings(saved_images: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return generate_registration_embedding_batch(saved_images).records
+
+
+def generate_registration_embedding_batch(saved_images: list[dict[str, Any]]) -> RegistrationEmbeddingBatch:
     embedding_results: list[FaceEmbeddingResult] = []
     rejected_images: list[str] = []
 
@@ -29,7 +40,9 @@ def generate_registration_embeddings(saved_images: list[dict[str, Any]]) -> list
             logger.warning("Registration image rejected for embedding: %s", reason)
         except FaceEmbeddingDependencyError:
             raise
-        except FaceEmbeddingError:
+        except FaceEmbeddingError as exc:
+            reason = f"{original_filename}: {exc}"
+            rejected_images.append(reason)
             logger.exception("Embedding generation failed for image %s", original_filename)
             raise
 
@@ -46,16 +59,18 @@ def generate_registration_embeddings(saved_images: list[dict[str, Any]]) -> list
         len(rejected_images),
     )
 
-    return [
-        {
-            "image_path": result.image_path,
-            "image_hash": result.image_hash,
-            "embedding": result.embedding,
-            "model_name": result.model_name,
-            "detector_backend": result.detector_backend,
-            "embedding_dimension": result.embedding_dimension,
-            "quality_score": result.quality_score,
-            "face_confidence": result.face_confidence,
-        }
-        for result in embedding_results
-    ]
+    records = [_embedding_result_to_record(result) for result in embedding_results]
+    return RegistrationEmbeddingBatch(records=records, rejected_reasons=rejected_images)
+
+
+def _embedding_result_to_record(result: FaceEmbeddingResult) -> dict[str, Any]:
+    return {
+        "image_path": result.image_path,
+        "image_hash": result.image_hash,
+        "embedding": result.embedding,
+        "model_name": result.model_name,
+        "detector_backend": result.detector_backend,
+        "embedding_dimension": result.embedding_dimension,
+        "quality_score": result.quality_score,
+        "face_confidence": result.face_confidence,
+    }

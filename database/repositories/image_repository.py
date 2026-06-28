@@ -2,6 +2,25 @@ import sqlite3
 from typing import Any
 
 
+def find_existing_image_hashes(
+    connection: sqlite3.Connection,
+    image_hashes: list[str],
+) -> set[str]:
+    if not image_hashes:
+        return set()
+
+    placeholders = ", ".join("?" for _ in image_hashes)
+    rows = connection.execute(
+        f"""
+        SELECT image_hash
+        FROM child_images
+        WHERE image_hash IN ({placeholders})
+        """,
+        image_hashes,
+    ).fetchall()
+    return {str(row["image_hash"]) for row in rows}
+
+
 def create_child_image_records(
     connection: sqlite3.Connection,
     child_id: int,

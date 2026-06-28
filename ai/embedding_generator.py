@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ai.model_assets import ModelAssetError, ensure_model_file
+from ai.model_assets import ModelAssetError, ModelAssetSpec, ensure_model_file
 from config.settings import (
     DEEPFACE_DETECTOR_BACKEND,
     DEEPFACE_MODEL_NAME,
@@ -11,10 +11,14 @@ from config.settings import (
     OPENCV_FACE_NMS_THRESHOLD,
     OPENCV_FACE_SCORE_THRESHOLD,
     OPENCV_FACE_TOP_K,
+    OPENCV_SFACE_MODEL_SHA256,
     OPENCV_SFACE_MODEL_PATH,
-    OPENCV_SFACE_MODEL_URL,
+    OPENCV_SFACE_MODEL_SIZE,
+    OPENCV_SFACE_MODEL_URLS,
+    OPENCV_YUNET_MODEL_SHA256,
     OPENCV_YUNET_MODEL_PATH,
-    OPENCV_YUNET_MODEL_URL,
+    OPENCV_YUNET_MODEL_SIZE,
+    OPENCV_YUNET_MODEL_URLS,
 )
 from utils.logger import get_logger
 
@@ -99,8 +103,22 @@ def _generate_opencv_sface_embedding(
     _ensure_opencv_face_api(cv2)
 
     try:
-        yunet_model_path = ensure_model_file(OPENCV_YUNET_MODEL_PATH, OPENCV_YUNET_MODEL_URL)
-        sface_model_path = ensure_model_file(OPENCV_SFACE_MODEL_PATH, OPENCV_SFACE_MODEL_URL)
+        yunet_model_path = ensure_model_file(
+            ModelAssetSpec(
+                path=OPENCV_YUNET_MODEL_PATH,
+                urls=OPENCV_YUNET_MODEL_URLS,
+                sha256=OPENCV_YUNET_MODEL_SHA256,
+                size_bytes=OPENCV_YUNET_MODEL_SIZE,
+            )
+        )
+        sface_model_path = ensure_model_file(
+            ModelAssetSpec(
+                path=OPENCV_SFACE_MODEL_PATH,
+                urls=OPENCV_SFACE_MODEL_URLS,
+                sha256=OPENCV_SFACE_MODEL_SHA256,
+                size_bytes=OPENCV_SFACE_MODEL_SIZE,
+            )
+        )
     except ModelAssetError as exc:
         raise FaceEmbeddingDependencyError(str(exc)) from exc
 

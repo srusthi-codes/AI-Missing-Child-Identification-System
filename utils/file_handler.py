@@ -12,6 +12,7 @@ from config.constants import ALLOWED_IMAGE_EXTENSIONS, ALLOWED_IMAGE_MIME_TYPES
 from config.settings import (
     BASE_DIR,
     CHILD_IMAGE_DIR,
+    FOUND_CHILD_UPLOAD_DIR,
     MAX_IMAGES_PER_CHILD,
     MAX_UPLOAD_SIZE_MB,
     MIN_IMAGE_HEIGHT,
@@ -128,6 +129,28 @@ def save_uploaded_images(case_id: str, prepared_images: list[PreparedImage]) -> 
 
     logger.info("Saved %s registration images for case_id=%s", len(saved_records), case_id)
     return saved_records
+
+
+def save_found_child_search_image(prepared_image: PreparedImage) -> dict[str, Any]:
+    FOUND_CHILD_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    image_filename = f"{uuid.uuid4().hex}.jpg"
+    image_path = FOUND_CHILD_UPLOAD_DIR / image_filename
+
+    prepared_image.image.save(image_path, format="JPEG", quality=90, optimize=True)
+    relative_path = image_path.relative_to(BASE_DIR)
+
+    record = {
+        "image_path": str(relative_path),
+        "absolute_path": str(image_path),
+        "original_filename": prepared_image.original_filename,
+        "content_type": "image/jpeg",
+        "file_size": image_path.stat().st_size,
+        "image_hash": prepared_image.image_hash,
+    }
+
+    logger.info("Saved found child search image path=%s", relative_path)
+    return record
 
 
 def cleanup_saved_files(paths: list[str]) -> None:

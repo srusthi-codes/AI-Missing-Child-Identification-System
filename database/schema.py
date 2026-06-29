@@ -81,6 +81,18 @@ SCHEMA_STATEMENTS = [
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uploaded_image_path TEXT NOT NULL,
+        image_hash TEXT,
+        matches_found INTEGER NOT NULL DEFAULT 0,
+        best_similarity_score REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'completed',
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_missing_children_case_id ON missing_children(case_id)",
     "CREATE INDEX IF NOT EXISTS idx_missing_children_status ON missing_children(status)",
     "CREATE INDEX IF NOT EXISTS idx_missing_children_full_name ON missing_children(full_name)",
@@ -90,6 +102,8 @@ SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_child_images_hash ON child_images(image_hash)",
     "CREATE INDEX IF NOT EXISTS idx_face_embeddings_child_id ON face_embeddings(child_id)",
     "CREATE INDEX IF NOT EXISTS idx_face_embeddings_image_hash ON face_embeddings(image_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_search_history_created_at ON search_history(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_search_history_image_hash ON search_history(image_hash)",
     "CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)",
 ]
 

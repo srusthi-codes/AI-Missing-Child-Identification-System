@@ -1,6 +1,7 @@
 from database.schema import initialize_database
 from ui.records_ui import render_records_page
 from ui.registration_ui import render_registration_page
+from ui.search_ui import render_found_child_search_page
 from utils.logger import get_logger
 
 import streamlit as st
@@ -25,13 +26,15 @@ def main() -> None:
 
     selected_page = st.sidebar.radio(
         "Navigation",
-        ["Register Missing Child", "View Records"],
+        ["Register Missing Child", "View Records", "Found Child Search"],
     )
 
     if selected_page == "Register Missing Child":
         render_registration_page()
-    else:
+    elif selected_page == "View Records":
         render_records_page()
+    else:
+        render_found_child_search_page()
 
 
 if __name__ == "__main__":

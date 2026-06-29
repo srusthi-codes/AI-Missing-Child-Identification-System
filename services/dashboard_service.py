@@ -5,7 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from config.constants import GENDER_OPTIONS
+from config.constants import GENDER_OPTIONS, MAX_CHILD_AGE, MIN_CHILD_AGE
 from config.settings import BASE_DIR
 from database.connection import database_transaction
 from database.repositories.dashboard_repository import (
@@ -266,8 +266,8 @@ def _optional_age(value: Any) -> int | None:
         age = int(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError("Age filter must be a valid number.") from exc
-    if age < 0 or age > 18:
-        raise ValidationError("Age filter must be between 0 and 18.")
+    if age < MIN_CHILD_AGE or age > MAX_CHILD_AGE:
+        raise ValidationError(f"Age filter must be between {MIN_CHILD_AGE} and {MAX_CHILD_AGE}.")
     return age
 
 

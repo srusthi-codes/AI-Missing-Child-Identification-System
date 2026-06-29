@@ -238,7 +238,7 @@ def _verify_filters(case_details: dict[str, Any]) -> None:
             raise RuntimeError(f"Dashboard filters did not return the sample case for filters={filters}")
 
     try:
-        search_dashboard_child_records({"age": 99})
+        search_dashboard_child_records({"age": 101})
     except ValidationError:
         pass
     else:

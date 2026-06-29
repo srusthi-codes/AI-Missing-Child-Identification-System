@@ -1,3 +1,4 @@
+from config.constants import MAX_CHILD_AGE
 from database.connection import get_connection
 from utils.logger import get_logger
 
@@ -11,7 +12,7 @@ SCHEMA_STATEMENTS = [
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         case_id TEXT NOT NULL UNIQUE,
         full_name TEXT NOT NULL,
-        age INTEGER NOT NULL CHECK(age >= 0 AND age <= 18),
+        age INTEGER NOT NULL CHECK(age >= 0 AND age <= 100),
         gender TEXT NOT NULL,
         identification_marks TEXT,
         last_seen_location TEXT NOT NULL,
@@ -111,6 +112,7 @@ SCHEMA_STATEMENTS = [
 def initialize_database() -> None:
     connection = get_connection()
     try:
+        _migrate_missing_children_age_range(connection)
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
         connection.commit()
@@ -121,3 +123,85 @@ def initialize_database() -> None:
         raise
     finally:
         connection.close()
+
+
+def _migrate_missing_children_age_range(connection) -> None:
+    row = connection.execute(
+        """
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'missing_children'
+        """
+    ).fetchone()
+    if row is None:
+        return
+
+    table_sql = str(row["sql"] or "")
+    normalized_sql = table_sql.replace(" ", "").lower()
+    if "age>=0andage<=18" not in normalized_sql:
+        return
+
+    logger.info("Migrating missing_children age CHECK constraint to 0-%s", MAX_CHILD_AGE)
+    connection.execute("PRAGMA foreign_keys = OFF")
+    connection.execute("PRAGMA legacy_alter_table = ON")
+    connection.execute("ALTER TABLE missing_children RENAME TO missing_children_legacy_age_check")
+    connection.execute(
+        """
+        CREATE TABLE missing_children (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id TEXT NOT NULL UNIQUE,
+            full_name TEXT NOT NULL,
+            age INTEGER NOT NULL CHECK(age >= 0 AND age <= 100),
+            gender TEXT NOT NULL,
+            identification_marks TEXT,
+            last_seen_location TEXT NOT NULL,
+            last_seen_date TEXT NOT NULL,
+            last_seen_time TEXT,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'missing',
+            registered_by INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO missing_children (
+            id,
+            case_id,
+            full_name,
+            age,
+            gender,
+            identification_marks,
+            last_seen_location,
+            last_seen_date,
+            last_seen_time,
+            description,
+            status,
+            registered_by,
+            created_at,
+            updated_at
+        )
+        SELECT
+            id,
+            case_id,
+            full_name,
+            age,
+            gender,
+            identification_marks,
+            last_seen_location,
+            last_seen_date,
+            last_seen_time,
+            description,
+            status,
+            registered_by,
+            created_at,
+            updated_at
+        FROM missing_children_legacy_age_check
+        """
+    )
+    connection.execute("DROP TABLE missing_children_legacy_age_check")
+    connection.execute("PRAGMA legacy_alter_table = OFF")
+    connection.execute("PRAGMA foreign_keys = ON")

@@ -14,6 +14,7 @@ from services.dashboard_service import (
     get_dashboard_overview,
     search_dashboard_child_records,
 )
+from ui.theme import render_kpi_cards, render_page_header
 from utils.logger import get_logger
 from utils.validators import ValidationError
 
@@ -33,7 +34,10 @@ SELECTED_CHILD_STATE_KEY = "dashboard_selected_child_id"
 
 
 def render_admin_dashboard_page() -> None:
-    st.title("Admin Dashboard")
+    render_page_header(
+        "Admin Dashboard",
+        "Monitor registrations, searches, matching outcomes, exports, and case operations.",
+    )
 
     try:
         overview = get_dashboard_overview()
@@ -53,15 +57,16 @@ def render_admin_dashboard_page() -> None:
 
 def _render_statistics(statistics: dict[str, Any]) -> None:
     st.subheader("System Statistics")
-    metric_cols = st.columns(3)
-    metric_cols[0].metric("Registered Children", statistics["total_registered_children"])
-    metric_cols[1].metric("Face Embeddings", statistics["total_face_embeddings"])
-    metric_cols[2].metric("Search Requests", statistics["total_search_requests"])
-
-    metric_cols = st.columns(3)
-    metric_cols[0].metric("Successful Matches", statistics["total_successful_matches"])
-    metric_cols[1].metric("Unsuccessful Searches", statistics["total_unsuccessful_searches"])
-    metric_cols[2].metric("Match Success", f"{statistics['match_success_percentage']:.2f}%")
+    render_kpi_cards(
+        [
+            ("Registered Children", statistics["total_registered_children"]),
+            ("Face Embeddings", statistics["total_face_embeddings"]),
+            ("Search Requests", statistics["total_search_requests"]),
+            ("Successful Matches", statistics["total_successful_matches"]),
+            ("Unsuccessful Searches", statistics["total_unsuccessful_searches"]),
+            ("Match Success", f"{statistics['match_success_percentage']:.2f}%"),
+        ]
+    )
 
 
 def _render_recent_tables(
@@ -96,16 +101,15 @@ def _render_filter_and_case_tools() -> None:
             gender = st.selectbox("Gender", ["All", *GENDER_OPTIONS], key=FILTER_GENDER_KEY)
         with filter_col_2:
             child_name = st.text_input("Child Name", max_chars=120, key=FILTER_CHILD_NAME_KEY)
-            age = st.text_input("Age", max_chars=2, key=FILTER_AGE_KEY)
+            age = st.text_input("Age", max_chars=3, key=FILTER_AGE_KEY, placeholder="0-100")
         with filter_col_3:
             use_registration_date = st.checkbox("Filter by Registration Date", key=FILTER_USE_DATE_KEY)
             registration_date = st.date_input(
                 "Registration Date",
-                max_value=date.today(),
                 key=FILTER_DATE_KEY,
             )
 
-        filter_submitted = st.form_submit_button("Apply Filters", use_container_width=True)
+        filter_submitted = st.form_submit_button("Apply Filters", use_container_width=True, type="primary")
 
     filters = {
         "case_id": case_id,
@@ -289,7 +293,15 @@ def _render_embedding_status(embeddings: list[dict[str, Any]]) -> None:
 
 @st.dialog("Confirm Case Deletion")
 def _confirm_delete_dialog(case_details: dict[str, Any]) -> None:
-    st.warning(f"This will permanently delete case {case_details['case_id']} from the database.")
+    st.markdown(
+        f"""
+        <div class="app-danger-note">
+            This will permanently delete case <strong>{case_details['case_id']}</strong>,
+            its image metadata, and stored embeddings.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     confirmation = st.text_input("Type the Case ID to confirm deletion")
 
     if st.button("Confirm Delete", type="primary", use_container_width=True):

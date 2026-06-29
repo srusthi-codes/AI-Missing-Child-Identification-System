@@ -1,4 +1,5 @@
 from database.schema import initialize_database
+from ui.dashboard_ui import render_admin_dashboard_page
 from ui.records_ui import render_records_page
 from ui.registration_ui import render_registration_page
 from ui.search_ui import render_found_child_search_page
@@ -26,15 +27,17 @@ def main() -> None:
 
     selected_page = st.sidebar.radio(
         "Navigation",
-        ["Register Missing Child", "View Records", "Found Child Search"],
+        ["Register Missing Child", "View Records", "Found Child Search", "Admin Dashboard"],
     )
 
     if selected_page == "Register Missing Child":
         render_registration_page()
     elif selected_page == "View Records":
         render_records_page()
-    else:
+    elif selected_page == "Found Child Search":
         render_found_child_search_page()
+    else:
+        render_admin_dashboard_page()
 
 
 if __name__ == "__main__":

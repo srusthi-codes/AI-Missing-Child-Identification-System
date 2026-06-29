@@ -20,6 +20,17 @@ from utils.validators import ValidationError
 
 logger = get_logger(__name__)
 
+FILTER_FORM_KEY = "dashboard_child_filters_form"
+FILTER_CASE_ID_KEY = "dashboard_filter_case_id"
+FILTER_CHILD_NAME_KEY = "dashboard_filter_child_name"
+FILTER_GENDER_KEY = "dashboard_filter_gender"
+FILTER_AGE_KEY = "dashboard_filter_age"
+FILTER_USE_DATE_KEY = "dashboard_filter_use_registration_date"
+FILTER_DATE_KEY = "dashboard_filter_registration_date"
+ACTIVE_FILTERS_STATE_KEY = "dashboard_active_child_filters"
+CHILD_RECORDS_STATE_KEY = "dashboard_child_records"
+SELECTED_CHILD_STATE_KEY = "dashboard_selected_child_id"
+
 
 def render_admin_dashboard_page() -> None:
     st.title("Admin Dashboard")
@@ -73,24 +84,25 @@ def _render_recent_tables(
 def _render_filter_and_case_tools() -> None:
     st.subheader("Child Records")
 
-    if "dashboard_child_records" not in st.session_state:
+    _initialize_dashboard_filter_state()
+
+    if CHILD_RECORDS_STATE_KEY not in st.session_state:
         _load_dashboard_child_records({})
 
-    with st.form("dashboard_child_filters"):
+    with st.form(FILTER_FORM_KEY):
         filter_col_1, filter_col_2, filter_col_3 = st.columns(3)
         with filter_col_1:
-            case_id = st.text_input("Case ID", max_chars=80)
-            gender = st.selectbox("Gender", ["All", *GENDER_OPTIONS])
+            case_id = st.text_input("Case ID", max_chars=80, key=FILTER_CASE_ID_KEY)
+            gender = st.selectbox("Gender", ["All", *GENDER_OPTIONS], key=FILTER_GENDER_KEY)
         with filter_col_2:
-            child_name = st.text_input("Child Name", max_chars=120)
-            age = st.text_input("Age", max_chars=2)
+            child_name = st.text_input("Child Name", max_chars=120, key=FILTER_CHILD_NAME_KEY)
+            age = st.text_input("Age", max_chars=2, key=FILTER_AGE_KEY)
         with filter_col_3:
-            use_registration_date = st.checkbox("Filter by Registration Date")
+            use_registration_date = st.checkbox("Filter by Registration Date", key=FILTER_USE_DATE_KEY)
             registration_date = st.date_input(
                 "Registration Date",
-                value=date.today(),
                 max_value=date.today(),
-                disabled=not use_registration_date,
+                key=FILTER_DATE_KEY,
             )
 
         filter_submitted = st.form_submit_button("Apply Filters", use_container_width=True)
@@ -105,10 +117,9 @@ def _render_filter_and_case_tools() -> None:
 
     if filter_submitted:
         _load_dashboard_child_records(filters)
-        st.session_state.dashboard_child_filters = filters
 
-    active_filters = st.session_state.get("dashboard_child_filters", {})
-    records = st.session_state.get("dashboard_child_records", [])
+    active_filters = st.session_state.get(ACTIVE_FILTERS_STATE_KEY, {})
+    records = st.session_state.get(CHILD_RECORDS_STATE_KEY, [])
 
     export_col_1, export_col_2 = st.columns(2)
     with export_col_1:
@@ -127,8 +138,8 @@ def _render_filter_and_case_tools() -> None:
 def _load_dashboard_child_records(filters: dict[str, Any]) -> None:
     try:
         with st.spinner("Loading child records..."):
-            st.session_state.dashboard_child_records = search_dashboard_child_records(filters)
-            st.session_state.dashboard_child_filters = filters
+            st.session_state[CHILD_RECORDS_STATE_KEY] = search_dashboard_child_records(filters)
+            st.session_state[ACTIVE_FILTERS_STATE_KEY] = filters
     except ValidationError as exc:
         st.error(str(exc))
         logger.info("Dashboard filter validation failed: %s", exc)
@@ -180,9 +191,9 @@ def _render_case_details_selector(records: list[dict[str, Any]]) -> None:
     selected_label = st.selectbox("Select case", list(options.keys()))
 
     if st.button("Load Case Details", use_container_width=True):
-        st.session_state.dashboard_selected_child_id = options[selected_label]
+        st.session_state[SELECTED_CHILD_STATE_KEY] = options[selected_label]
 
-    selected_child_id = st.session_state.get("dashboard_selected_child_id")
+    selected_child_id = st.session_state.get(SELECTED_CHILD_STATE_KEY)
     if not selected_child_id:
         return
 
@@ -285,8 +296,8 @@ def _confirm_delete_dialog(case_details: dict[str, Any]) -> None:
         try:
             result = delete_child_case(case_details["child_id"], confirmation)
             st.success(f"Deleted case {result['case_id']}.")
-            st.session_state.pop("dashboard_selected_child_id", None)
-            st.session_state.pop("dashboard_child_records", None)
+            st.session_state.pop(SELECTED_CHILD_STATE_KEY, None)
+            st.session_state.pop(CHILD_RECORDS_STATE_KEY, None)
             st.rerun()
         except ValidationError as exc:
             st.error(str(exc))
@@ -348,3 +359,18 @@ def _display_value(value: Any) -> str:
     if isinstance(value, str) and not value.strip():
         return "Not provided"
     return str(value)
+
+
+def _initialize_dashboard_filter_state() -> None:
+    defaults = {
+        FILTER_CASE_ID_KEY: "",
+        FILTER_CHILD_NAME_KEY: "",
+        FILTER_GENDER_KEY: "All",
+        FILTER_AGE_KEY: "",
+        FILTER_USE_DATE_KEY: False,
+        FILTER_DATE_KEY: date.today(),
+        ACTIVE_FILTERS_STATE_KEY: {},
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value

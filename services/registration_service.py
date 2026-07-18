@@ -25,6 +25,7 @@ def register_missing_child(
     child_data: dict[str, Any],
     parent_data: dict[str, Any],
     uploaded_files: list[Any] | None,
+    registered_by_user_id: int | None = None,
 ) -> dict[str, Any]:
     initialize_database()
 
@@ -41,7 +42,7 @@ def register_missing_child(
             case_id = _generate_case_id(connection)
             normalized_child["case_id"] = case_id
             normalized_child["status"] = CHILD_STATUS_MISSING
-            normalized_child["registered_by"] = None
+            normalized_child["registered_by"] = _normalize_optional_user_id(registered_by_user_id)
 
             _reject_existing_images(connection, prepared_images)
 
@@ -121,6 +122,18 @@ def _generate_case_id(connection: sqlite3.Connection) -> str:
         if not case_id_exists(connection, case_id):
             return case_id
     raise RuntimeError("Unable to generate a unique case ID")
+
+
+def _normalize_optional_user_id(value: int | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        normalized_value = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Registered user ID is invalid.") from exc
+    if normalized_value <= 0:
+        raise ValidationError("Registered user ID is invalid.")
+    return normalized_value
 
 
 def _reject_existing_images(connection: sqlite3.Connection, prepared_images: list[Any]) -> None:

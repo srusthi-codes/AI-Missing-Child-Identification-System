@@ -8,6 +8,19 @@ logger = get_logger(__name__)
 
 SCHEMA_STATEMENTS = [
     """
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('parent_guardian', 'child_finder', 'authority')),
+        phone TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_login_at TEXT
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS missing_children (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         case_id TEXT NOT NULL UNIQUE,
@@ -94,6 +107,74 @@ SCHEMA_STATEMENTS = [
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS found_child_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reporter_user_id INTEGER NOT NULL,
+        search_id INTEGER,
+        uploaded_image_path TEXT NOT NULL,
+        location TEXT NOT NULL,
+        description TEXT,
+        matches_found INTEGER NOT NULL DEFAULT 0,
+        best_similarity_score REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending_verification',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (search_id) REFERENCES search_history(id) ON DELETE SET NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS found_child_report_matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        report_id INTEGER NOT NULL,
+        child_id INTEGER NOT NULL,
+        case_id TEXT NOT NULL,
+        similarity_score REAL NOT NULL,
+        match_rank INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (report_id) REFERENCES found_child_reports(id) ON DELETE CASCADE,
+        FOREIGN KEY (child_id) REFERENCES missing_children(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient_user_id INTEGER,
+        recipient_role TEXT,
+        child_id INTEGER,
+        report_id INTEGER,
+        case_id TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        notification_type TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (child_id) REFERENCES missing_children(id) ON DELETE CASCADE,
+        FOREIGN KEY (report_id) REFERENCES found_child_reports(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS age_progression_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        child_id INTEGER NOT NULL,
+        case_id TEXT NOT NULL,
+        source_image_path TEXT NOT NULL,
+        generated_image_path TEXT NOT NULL,
+        source_age INTEGER NOT NULL,
+        target_age INTEGER NOT NULL,
+        target_age_label TEXT NOT NULL,
+        progression_years INTEGER NOT NULL,
+        model_name TEXT NOT NULL,
+        identity_score REAL,
+        identity_quality TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (child_id) REFERENCES missing_children(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+    "CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)",
     "CREATE INDEX IF NOT EXISTS idx_missing_children_case_id ON missing_children(case_id)",
     "CREATE INDEX IF NOT EXISTS idx_missing_children_status ON missing_children(status)",
     "CREATE INDEX IF NOT EXISTS idx_missing_children_full_name ON missing_children(full_name)",
@@ -105,6 +186,18 @@ SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_face_embeddings_image_hash ON face_embeddings(image_hash)",
     "CREATE INDEX IF NOT EXISTS idx_search_history_created_at ON search_history(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_search_history_image_hash ON search_history(image_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_found_reports_reporter ON found_child_reports(reporter_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_found_reports_status ON found_child_reports(status)",
+    "CREATE INDEX IF NOT EXISTS idx_found_reports_created_at ON found_child_reports(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_found_report_matches_report ON found_child_report_matches(report_id)",
+    "CREATE INDEX IF NOT EXISTS idx_found_report_matches_child ON found_child_report_matches(child_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(recipient_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications(recipient_role)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_child ON notifications(child_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_age_progression_child_id ON age_progression_history(child_id)",
+    "CREATE INDEX IF NOT EXISTS idx_age_progression_case_id ON age_progression_history(case_id)",
+    "CREATE INDEX IF NOT EXISTS idx_age_progression_created_at ON age_progression_history(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)",
 ]
 

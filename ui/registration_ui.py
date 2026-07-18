@@ -13,7 +13,7 @@ from utils.validators import ValidationError
 logger = get_logger(__name__)
 
 
-def render_registration_page() -> None:
+def render_registration_page(registered_by_user_id: int | None = None) -> None:
     render_page_header(
         "Missing Child Registration",
         "Create a complete case record with guardian information and clear child images.",
@@ -115,7 +115,12 @@ def render_registration_page() -> None:
 
     try:
         with st.spinner("Saving registration, validating images, and generating embeddings..."):
-            result = register_missing_child(child_data, parent_data, uploaded_images)
+            result = register_missing_child(
+                child_data,
+                parent_data,
+                uploaded_images,
+                registered_by_user_id=registered_by_user_id,
+            )
 
         st.success(f"Registration saved successfully. Case ID: {result['case_id']}")
         metric_col_1, metric_col_2 = st.columns(2)
@@ -123,7 +128,7 @@ def render_registration_page() -> None:
         metric_col_2.metric("Face Embeddings Stored", result["embedding_count"])
 
     except ValidationError as exc:
-        st.error(f"Registration validation failed: {exc}")
+        st.error(f"Please correct the registration details: {exc}")
         logger.info("Registration validation failed: %s", exc)
     except Exception:
         st.error("Registration could not be completed. Check the logs and try again.")

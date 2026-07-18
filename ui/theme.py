@@ -92,6 +92,52 @@ def apply_app_theme() -> None:
             margin-bottom: 0.6rem;
         }
 
+        .app-home-hero {
+            border: 1px solid var(--app-border);
+            background: linear-gradient(135deg, #ffffff 0%, #ecfeff 58%, #eff6ff 100%);
+            border-radius: 8px;
+            padding: 1.3rem 1.4rem;
+            margin-bottom: 1rem;
+        }
+
+        .app-home-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .app-home-brand img {
+            width: 58px;
+            height: 58px;
+        }
+
+        .app-home-title {
+            color: #0f172a;
+            font-size: 1.15rem;
+            font-weight: 800;
+        }
+
+        .app-home-subtitle {
+            color: var(--app-muted);
+            font-size: 0.85rem;
+        }
+
+        .app-home-hero h1 {
+            color: #0f172a;
+            font-size: 2.1rem;
+            line-height: 1.15;
+            letter-spacing: 0;
+            margin: 0 0 0.55rem;
+        }
+
+        .app-home-hero p {
+            color: #475569;
+            font-size: 1rem;
+            max-width: 860px;
+            margin: 0;
+        }
+
         .app-kpi-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -144,6 +190,57 @@ def apply_app_theme() -> None:
             padding: 0.2rem 0.55rem;
             font-size: 0.78rem;
             font-weight: 700;
+        }
+
+        .app-status-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.76rem;
+            font-weight: 750;
+            border: 1px solid var(--app-border);
+            color: #334155;
+            background: #f8fafc;
+        }
+
+        .app-status-match {
+            border-color: #86efac;
+            color: #166534;
+            background: #f0fdf4;
+        }
+
+        .app-status-no-match {
+            border-color: #fecaca;
+            color: #991b1b;
+            background: #fef2f2;
+        }
+
+        .app-status-pending {
+            border-color: #bae6fd;
+            color: #075985;
+            background: #f0f9ff;
+        }
+
+        .app-report-card {
+            border: 1px solid var(--app-border);
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 0.95rem 1rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .app-report-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.45rem;
+        }
+
+        .app-report-meta {
+            color: var(--app-muted);
+            font-size: 0.86rem;
         }
 
         .app-danger-note {
